@@ -6,7 +6,7 @@ import fitz  # PyMuPDF
 # Initialize OpenAI client
 client = OpenAI()
 
-def chatGPT_prompt(paragraph):
+def chatGPT_prompt(paragraph, user_input):
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -14,7 +14,8 @@ def chatGPT_prompt(paragraph):
             {
                 "role": "user",
                 "content": f"Based on the following paragraph: '{paragraph}'. " +
-                           "Provide as many difficult multiple-choice questions as possible with exactly four options, and clearly indicate the correct answer. " +
+                           f"Provide up to '{user_input}' " +
+                           "multiple-choice questions with exactly four options, and clearly indicate the correct answer. " +
                            "Please follow this strict format:\n" +
                            "Question: <question text>\n" +
                            "a) <option a>\n" +
@@ -152,10 +153,13 @@ if uploaded_file is not None:
     # Read PDF content if a file is uploaded
     user_paragraph = read_pdf(uploaded_file)
 
+# Numeric input for number of questions
+num_questions = st.number_input("Enter the number of questions to generate:", min_value=1, max_value=10, value=5)
+
 if st.button("Generate Quiz"):
     if user_paragraph:
         # Get questions from the chatGPT_prompt function
-        quiz_string = chatGPT_prompt(user_paragraph)
+        quiz_string = chatGPT_prompt(user_paragraph, num_questions)
         st.session_state.quiz_data = parse_questions_from_string(quiz_string)
         st.session_state.current_question_index = 0
         st.session_state.score = 0
