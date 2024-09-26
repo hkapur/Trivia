@@ -154,7 +154,7 @@ if uploaded_file is not None:
     user_paragraph = read_pdf(uploaded_file)
 
 # Numeric input for number of questions
-num_questions = st.number_input("Enter the number of questions to generate:", min_value=1, max_value=10, value=5)
+num_questions = st.number_input("Enter the number of questions to generate:", min_value=1, max_value=20, value=5)
 
 if st.button("Generate Quiz"):
     if user_paragraph:
