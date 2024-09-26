@@ -12,66 +12,70 @@ def chatGPT_prompt(paragraph):
             {"role": "system", "content": "You are an educator and help in making quizzes"},
             {
                 "role": "user",
-                "content": f"Based on the following paragraph: '{paragraph}' "
-                           "Provide 5 multiple-choice questions with four options, and indicate the correct answer clearly. Format your response as follows:\n"
-                           "Example Question: What is the nickname of Manchester United Football Club?\n"
-                           "Options:\n"
-                           "a) The Red Devils\n"
-                           "b) The Blues\n"
-                           "c) The Gunners\n"
-                           "d) The Citizens\n"
-                           "Answer: a)"
+                "content": f"Based on the following paragraph: '{paragraph}'." +
+                           " Provide as many difficult multiple-choice questions as possible with exactly four options, and clearly indicate the correct answer." +
+                           " Please follow this strict format:\n" +
+                           "Question: <question text>\n" +
+                           "a) <option a>\n" +
+                           "b) <option b>\n" +
+                           "c) <option c>\n" +
+                           "d) <option d>\n" +
+                           "Answer: <correct answer letter>"
             }
         ]
     )
-
     return completion.choices[0].message.content
-
 
 # Function to parse questions from the string
 def parse_questions_from_string(quiz_string):
     quiz_data = []
 
-    # Split by lines
-    lines = quiz_string.strip().split('\n')
+    # Split by "Question" and filter out any empty strings
+    questions = [q.strip() for q in quiz_string.split("Question") if q.strip()]
 
-    # Validate the number of lines
-    if len(lines) < 6:  # We expect at least 6 lines: 1 question + 4 options + 1 answer line
-        st.error("Received an unexpected quiz format. Please try again.")
-        return []
+    for q in questions:
+        lines = q.split("\n")
 
-    # Extract the question
-    question = lines[0].replace("Example Question:", "").strip()
+        # Ensure there are at least enough lines for 1 question, 4 options, and an answer
+        if len(lines) < 6:
+            st.warning("Unexpected format for a question. Skipping.")
+            continue
 
-    # Extract options and remove any empty strings
-    options = [line.strip() for line in lines[2:6] if line.strip()]
+        # Extract the question text
+        question = lines[0].split(":")[-1].strip()
 
-    # Check that we have exactly 4 options
-    if len(options) != 4:
-        st.error("Expected exactly 4 options, but got: {}".format(len(options)))
-        return []
+        # Extract options, handling missing or incorrectly formatted options
+        options = []
+        for line in lines[1:5]:
+            if ")" in line:
+                options.append(line.strip())
+            else:
+                st.warning(f"Option format is incorrect for question '{question}'. Skipping this question.")
+                continue
 
-    # Extract the correct answer
-    answer_line = lines[6].strip() if len(lines) > 6 else ""
+        # Extract and validate the correct answer
+        answer_line = lines[5].strip()
+        if answer_line.startswith("Answer:"):
+            correct_answer_letter = answer_line.split(":")[1].strip().lower()
 
-    # Validate answer line format
-    if answer_line.startswith("Answer:"):
-        correct_answer_letter = answer_line.split(": ")[1].strip().lower()
+            # Find the corresponding option based on the answer letter
+            correct_option = None
+            for option in options:
+                if option.lower().startswith(correct_answer_letter):
+                    correct_option = option
+                    break
 
-        # Find the correct answer text
-        correct_answer = next((opt for opt in options if opt.startswith(correct_answer_letter)), None)
-
-        if correct_answer:
-            correct_answer_text = correct_answer.replace(f"{correct_answer_letter}) ", "").strip()
-            quiz_data.append((question, options, correct_answer_text))
+            if correct_option:
+                # Append the question, options, and correct answer to quiz_data
+                quiz_data.append((question, options, correct_option))
+            else:
+                st.error(f"Correct answer '{correct_answer_letter}' not found in options for question '{question}'. Skipping.")
         else:
-            st.error("Could not find the correct answer in the options.")
-            return []
-    else:
-        st.error("Answer format is incorrect. Please check the response format.")
-        return []
+            st.error(f"Answer format is incorrect for question '{question}'. Skipping this question.")
 
-    random.shuffle(quiz_data)  # Shuffle questions randomly
+    # Shuffle the quiz data for randomness
+    random.shuffle(quiz_data)
+
     return quiz_data
 
 
@@ -83,6 +87,7 @@ if 'quiz_data' not in st.session_state:
     st.session_state.selected_answer = None
     st.session_state.feedback = ""
     st.session_state.is_quiz_finished = False
+    st.session_state.is_answer_submitted = False  # Track if the answer is already submitted
 
 
 # Function to display the current question
@@ -117,6 +122,9 @@ def submit_answer():
     else:
         st.session_state.feedback = f"Wrong! The correct answer was: {correct_answer}"
 
+    # Set the answer submitted flag to True to prevent further submissions for this question
+    st.session_state.is_answer_submitted = True
+
 
 # Function to end the quiz and show the final score
 def end_quiz():
@@ -140,6 +148,7 @@ if st.button("Generate Quiz"):
         st.session_state.selected_answer = None
         st.session_state.feedback = ""
         st.session_state.is_quiz_finished = False
+        st.session_state.is_answer_submitted = False  # Reset for the new quiz
     else:
         st.error("Please enter a paragraph before generating the quiz.")
 
@@ -167,7 +176,7 @@ else:
             st.write("No more questions available.")
 
         # Submit button to check the answer
-        if st.button("Submit"):
+        if st.button("Submit", disabled=st.session_state.is_answer_submitted):
             submit_answer()
 
         # Display feedback
@@ -183,8 +192,9 @@ else:
                 if st.session_state.current_question_index >= len(st.session_state.quiz_data):
                     st.session_state.is_quiz_finished = True
 
-                # Reset feedback and selected answer for the next question
+                # Reset feedback, selected answer, and submission flag for the next question
                 st.session_state.selected_answer = None  # Reset to None
                 st.session_state.feedback = ""
+                st.session_state.is_answer_submitted = False  # Reset for the next question
         else:
             st.button("Next Question", disabled=True)  # Keep button disabled
