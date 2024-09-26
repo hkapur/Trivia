@@ -1,6 +1,7 @@
 import streamlit as st
 import random
 from openai import OpenAI
+import fitz  # PyMuPDF
 
 # Initialize OpenAI client
 client = OpenAI()
@@ -12,9 +13,9 @@ def chatGPT_prompt(paragraph):
             {"role": "system", "content": "You are an educator and help in making quizzes"},
             {
                 "role": "user",
-                "content": f"Based on the following paragraph: '{paragraph}'." +
-                           " Provide as many difficult multiple-choice questions as possible with exactly four options, and clearly indicate the correct answer." +
-                           " Please follow this strict format:\n" +
+                "content": f"Based on the following paragraph: '{paragraph}'. " +
+                           "Provide as many difficult multiple-choice questions as possible with exactly four options, and clearly indicate the correct answer. " +
+                           "Please follow this strict format:\n" +
                            "Question: <question text>\n" +
                            "a) <option a>\n" +
                            "b) <option b>\n" +
@@ -78,7 +79,6 @@ def parse_questions_from_string(quiz_string):
 
     return quiz_data
 
-
 # Initialize session state variables
 if 'quiz_data' not in st.session_state:
     st.session_state.quiz_data = []
@@ -88,7 +88,6 @@ if 'quiz_data' not in st.session_state:
     st.session_state.feedback = ""
     st.session_state.is_quiz_finished = False
     st.session_state.is_answer_submitted = False  # Track if the answer is already submitted
-
 
 # Function to display the current question
 def show_question():
@@ -125,18 +124,33 @@ def submit_answer():
     # Set the answer submitted flag to True to prevent further submissions for this question
     st.session_state.is_answer_submitted = True
 
-
 # Function to end the quiz and show the final score
 def end_quiz():
     st.write("### Quiz Over!")
     st.write(f"Your final score: {st.session_state.score}/{len(st.session_state.quiz_data)}")
 
+# Function to read PDF content
+def read_pdf(uploaded_file):
+    # Open the uploaded PDF file from the file-like object
+    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    doc.close()  # Close the document after reading
+    return text
 
 # Main Quiz Display
 st.title("Quiz Game")
 
-# User input for paragraph
+# User input for paragraph or file upload
 user_paragraph = st.text_area("Enter a paragraph of your choice:", height=200)
+
+# File uploader for PDF
+uploaded_file = st.file_uploader("Or upload a PDF file:", type=["pdf"])
+
+if uploaded_file is not None:
+    # Read PDF content if a file is uploaded
+    user_paragraph = read_pdf(uploaded_file)
 
 if st.button("Generate Quiz"):
     if user_paragraph:
@@ -150,7 +164,7 @@ if st.button("Generate Quiz"):
         st.session_state.is_quiz_finished = False
         st.session_state.is_answer_submitted = False  # Reset for the new quiz
     else:
-        st.error("Please enter a paragraph before generating the quiz.")
+        st.error("Please enter a paragraph or upload a PDF before generating the quiz.")
 
 # Show the current score
 st.write(f"**Score:** {st.session_state.score}")
