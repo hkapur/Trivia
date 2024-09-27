@@ -1,3 +1,4 @@
+import math
 import streamlit as st
 import random
 from openai import OpenAI
@@ -6,11 +7,12 @@ import fitz  # PyMuPDF
 # Initialize OpenAI client
 client = OpenAI()
 
-def chatGPT_prompt(paragraph, user_input):
+
+def chatGPT_prompt_mcq(paragraph, user_input):
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are an educator and help in making quizzes"},
+            {"role": "system", "content": "You are an educator and help in making mcq questions"},
             {
                 "role": "user",
                 "content": f"Based on the following paragraph: '{paragraph}'. " +
@@ -27,6 +29,32 @@ def chatGPT_prompt(paragraph, user_input):
         ]
     )
     return completion.choices[0].message.content
+
+
+def chatGPT_prompt_fill_in_the_blank(paragraph, user_input):
+    if user_input < 1:
+        return
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an educator and help in making fill in the blank questions"},
+            {
+                "role": "user",
+                "content": f"Based on the following paragraph: '{paragraph}'. " +
+                           f"Provide up to '{user_input}' " +
+                           "fill-in-the-blank questions with exactly four options. " +
+                           "Please follow this strict format:\n" +
+                           "Question: <question text>\n" +
+                           "a) <option a>\n" +
+                           "b) <option b>\n" +
+                           "c) <option c>\n" +
+                           "d) <option d>\n" +
+                           "Answer: <correct answer letter>"
+            }
+        ]
+    )
+    return completion.choices[0].message.content
+
 
 # Function to parse questions from the string
 def parse_questions_from_string(quiz_string):
@@ -71,7 +99,8 @@ def parse_questions_from_string(quiz_string):
                 # Append the question, options, and correct answer to quiz_data
                 quiz_data.append((question, options, correct_option))
             else:
-                st.error(f"Correct answer '{correct_answer_letter}' not found in options for question '{question}'. Skipping.")
+                st.error(
+                    f"Correct answer '{correct_answer_letter}' not found in options for question '{question}'. Skipping.")
         else:
             st.error(f"Answer format is incorrect for question '{question}'. Skipping this question.")
 
@@ -79,6 +108,7 @@ def parse_questions_from_string(quiz_string):
     random.shuffle(quiz_data)
 
     return quiz_data
+
 
 # Initialize session state variables
 if 'quiz_data' not in st.session_state:
@@ -90,6 +120,7 @@ if 'quiz_data' not in st.session_state:
     st.session_state.is_quiz_finished = False
     st.session_state.is_answer_submitted = False  # Track if the answer is already submitted
 
+
 # Function to display the current question
 def show_question():
     question, options, correct_answer = st.session_state.quiz_data[st.session_state.current_question_index]
@@ -100,9 +131,12 @@ def show_question():
     # Ensure options are not empty
     if options:
         # Create radio button options for answer selection
-        st.session_state.selected_answer = st.radio("Choose an answer:", options, index=0 if st.session_state.selected_answer is None else options.index(st.session_state.selected_answer))
+        st.session_state.selected_answer = st.radio("Choose an answer:", options,
+                                                    index=0 if st.session_state.selected_answer is None else options.index(
+                                                        st.session_state.selected_answer))
     else:
         st.error("No options available for this question.")
+
 
 # Function to handle the answer submission
 def submit_answer():
@@ -125,10 +159,12 @@ def submit_answer():
     # Set the answer submitted flag to True to prevent further submissions for this question
     st.session_state.is_answer_submitted = True
 
+
 # Function to end the quiz and show the final score
 def end_quiz():
     st.write("### Quiz Over!")
     st.write(f"Your final score: {st.session_state.score}/{len(st.session_state.quiz_data)}")
+
 
 # Function to read PDF content
 def read_pdf(uploaded_file):
@@ -139,6 +175,7 @@ def read_pdf(uploaded_file):
         text += page.get_text()
     doc.close()  # Close the document after reading
     return text
+
 
 # Main Quiz Display
 st.title("Quiz Game")
@@ -154,13 +191,19 @@ if uploaded_file is not None:
     user_paragraph = read_pdf(uploaded_file)
 
 # Numeric input for number of questions
-num_questions = st.number_input("Enter the number of questions to generate:", min_value=1, max_value=20, value=5)
+num_questions = st.number_input("Enter the number of questions to generate:", min_value=1, max_value=100, value=5)
 
 if st.button("Generate Quiz"):
     if user_paragraph:
-        # Get questions from the chatGPT_prompt function
-        quiz_string = chatGPT_prompt(user_paragraph, num_questions)
-        st.session_state.quiz_data = parse_questions_from_string(quiz_string)
+        # Generate both multiple-choice and fill-in-the-blank questions
+        quiz_string_mcq = chatGPT_prompt_mcq(user_paragraph, math.ceil(num_questions/2))
+        combined_quiz_string = quiz_string_mcq
+
+        quiz_string_fitb = chatGPT_prompt_fill_in_the_blank(user_paragraph, math.floor(num_questions/2))
+        if quiz_string_fitb:
+            combined_quiz_string = quiz_string_mcq + "\n" + quiz_string_fitb
+
+        st.session_state.quiz_data = parse_questions_from_string(combined_quiz_string)
         st.session_state.current_question_index = 0
         st.session_state.score = 0
         st.session_state.selected_answer = None
